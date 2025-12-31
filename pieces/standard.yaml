@@ -1,0 +1,115 @@
+# Standard Chess Pieces
+# Coordinate system: [x, y] where +x is right, +y is forward (toward opponent)
+
+king:
+  name: "King"
+  symbol: "K"
+  value: 0  # infinite/game-ending
+  royal: true  # loss condition if captured/checkmated
+  moves:
+    - type: slide
+      directions:
+        - [1, 0]   # right
+        - [-1, 0]  # left
+        - [0, 1]   # forward
+        - [0, -1]  # backward
+        - [1, 1]   # forward-right
+        - [1, -1]  # backward-right
+        - [-1, 1]  # forward-left
+        - [-1, -1] # backward-left
+      range: 1
+
+queen:
+  name: "Queen"
+  symbol: "Q"
+  value: 9
+  moves:
+    - type: slide
+      directions:
+        # Orthogonal (rook-like)
+        - [1, 0]
+        - [-1, 0]
+        - [0, 1]
+        - [0, -1]
+        # Diagonal (bishop-like)
+        - [1, 1]
+        - [1, -1]
+        - [-1, 1]
+        - [-1, -1]
+      range: unlimited
+
+rook:
+  name: "Rook"
+  symbol: "R"
+  value: 5
+  moves:
+    - type: slide
+      directions:
+        - [1, 0]   # right
+        - [-1, 0]  # left
+        - [0, 1]   # forward
+        - [0, -1]  # backward
+      range: unlimited
+
+bishop:
+  name: "Bishop"
+  symbol: "B"
+  value: 3
+  moves:
+    - type: slide
+      directions:
+        - [1, 1]   # forward-right
+        - [1, -1]  # backward-right
+        - [-1, 1]  # forward-left
+        - [-1, -1] # backward-left
+      range: unlimited
+
+knight:
+  name: "Knight"
+  symbol: "N"
+  value: 3
+  moves:
+    - type: leap
+      vectors:
+        - [1, 2]
+        - [1, -2]
+        - [-1, 2]
+        - [-1, -2]
+        - [2, 1]
+        - [2, -1]
+        - [-2, 1]
+        - [-2, -1]
+
+pawn:
+  name: "Pawn"
+  symbol: "P"
+  value: 1
+  moves:
+    # Normal forward move (non-capturing)
+    - type: slide
+      directions:
+        - [0, 1]  # forward only
+      range: 1
+      move_only: true  # cannot capture with this move
+
+    # Initial double move (non-capturing)
+    - type: slide
+      directions:
+        - [0, 1]  # forward only
+      range: 2
+      move_only: true
+      initial_only: true  # only from starting position
+
+    # Diagonal capture
+    - type: slide
+      directions:
+        - [1, 1]   # forward-right
+        - [-1, 1]  # forward-left
+      range: 1
+      capture_only: true  # must capture to use this move
+
+  special_rules:
+    - en_passant: true
+    - promotion:
+        rank: 8  # promotes on reaching 8th rank
+        options: [queen, rook, bishop, knight]  # can promote to these
