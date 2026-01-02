@@ -1,7 +1,7 @@
 """
 Ultimate Random Chess - Self-Play Training
 
-AlphaZero-style training loop optimized for M2 Max.
+AlphaZero-style training loop. Supports MPS (Mac), CUDA (NVIDIA), and CPU.
 """
 
 import os
@@ -50,7 +50,7 @@ class TrainingConfig:
     checkpoint_dir: str = "checkpoints"
 
     # PGN logging
-    pgn_dir: str = "/Users/zoltankiss/Projects/ai-experiments/ultimate-random-chess-2026/training-runs"
+    pgn_dir: str = "training-runs"      # Relative path (works on cloud and local)
     save_pgn: bool = True               # Save all games as PGN files
 
     # General
