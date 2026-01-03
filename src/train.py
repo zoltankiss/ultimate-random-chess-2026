@@ -21,6 +21,7 @@ from tqdm import tqdm
 from game import GameState, create_starting_position, generate_legal_moves, get_game_result, make_move, print_board, Color
 from network import ChessNetwork, NetworkConfig, encode_board, move_to_policy_index, get_policy_mask, get_device
 from mcts import MCTS, MCTSConfig, play_game
+from parallel_mcts import ParallelSelfPlay
 from pgn import PGNWriter
 
 
@@ -56,6 +57,9 @@ class TrainingConfig:
     # General
     num_iterations: int = 100           # Total training iterations
     device: str = "auto"                # "auto", "mps", "cuda", "cpu"
+
+    # Parallelization
+    num_workers: int = 8                # Parallel self-play games (batched on GPU)
 
 
 class ReplayBuffer:
@@ -145,41 +149,62 @@ class Trainer:
         return play_game(self.network, mcts_config, self.device, verbose=False, return_moves=return_moves)
 
     def run_self_play(self) -> int:
-        """Run self-play games and add to replay buffer."""
+        """Run self-play games and add to replay buffer using parallel execution."""
         self.network.eval()
 
-        games_data = []
-        games_for_pgn = []  # (move_history, result) tuples
+        mcts_config = MCTSConfig(num_simulations=self.config.mcts_simulations)
+        parallel_player = ParallelSelfPlay(
+            self.network,
+            mcts_config,
+            self.device,
+            num_parallel=self.config.num_workers
+        )
+
+        print(f"Playing {self.config.games_per_iteration} self-play games ({self.config.num_workers} parallel)...")
+
+        # Play all games with parallel batched inference
+        games_results = []
+        games_played = 0
         total_positions = 0
 
-        print(f"Playing {self.config.games_per_iteration} self-play games...")
-
-        for i in tqdm(range(self.config.games_per_iteration), desc="Self-play"):
-            if self.pgn_writer:
-                training_data, move_history, result = self.self_play_game(return_moves=True)
-                games_data.append(training_data)
-                games_for_pgn.append((move_history, result))
-            else:
-                game_data = self.self_play_game(return_moves=False)
-                games_data.append(game_data)
-
-            total_positions += len(games_data[-1])
-
-        # Add to replay buffer
-        for game_data in games_data:
-            self.replay_buffer.add_game(game_data)
-
-        # Save PGN files
-        if self.pgn_writer and games_for_pgn:
-            for i, (move_history, result) in enumerate(games_for_pgn):
-                self.pgn_writer.save_game(
-                    move_history, result,
-                    iteration=self.iteration,
-                    game_num=i + 1,
-                    metadata={'MCTSSimulations': str(self.config.mcts_simulations)}
+        with tqdm(total=self.config.games_per_iteration, desc="Self-play") as pbar:
+            while games_played < self.config.games_per_iteration:
+                batch_size = min(
+                    self.config.num_workers,
+                    self.config.games_per_iteration - games_played
                 )
 
-        self.total_games += len(games_data)
+                batch_results = parallel_player.play_games(
+                    batch_size,
+                    verbose=False,
+                    return_moves=bool(self.pgn_writer)
+                )
+
+                games_results.extend(batch_results)
+                games_played += batch_size
+                pbar.update(batch_size)
+
+        # Process results
+        for result in games_results:
+            if self.pgn_writer:
+                training_data, move_history, game_result = result
+                self.replay_buffer.add_game(training_data)
+                total_positions += len(training_data)
+
+                # Save PGN
+                self.pgn_writer.save_game(
+                    move_history, game_result,
+                    iteration=self.iteration,
+                    game_num=self.total_games + 1,
+                    metadata={'MCTSSimulations': str(self.config.mcts_simulations)}
+                )
+            else:
+                training_data = result
+                self.replay_buffer.add_game(training_data)
+                total_positions += len(training_data)
+
+            self.total_games += 1
+
         self.total_positions += total_positions
 
         return total_positions
@@ -307,6 +332,7 @@ class Trainer:
         print(f"Iterations: {num_iterations}")
         print(f"Games per iteration: {self.config.games_per_iteration}")
         print(f"MCTS simulations: {self.config.mcts_simulations}")
+        print(f"Parallel workers: {self.config.num_workers}")
 
         # Initialize PGN writer for this run
         if self.pgn_writer:
@@ -439,6 +465,7 @@ if __name__ == "__main__":
     parser.add_argument("--games", type=int, default=10, help="Games per iteration")
     parser.add_argument("--sims", type=int, default=25, help="MCTS simulations per move")
     parser.add_argument("--checkpoint-interval", type=int, default=10, help="Save checkpoint every N iterations")
+    parser.add_argument("--workers", type=int, default=8, help="Parallel self-play games (batched on GPU)")
 
     args = parser.parse_args()
 
@@ -457,6 +484,7 @@ if __name__ == "__main__":
         config.games_per_iteration = args.games
         config.mcts_simulations = args.sims
         config.checkpoint_interval = args.checkpoint_interval
+        config.num_workers = args.workers
 
         trainer = Trainer(config)
 
