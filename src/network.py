@@ -34,9 +34,9 @@ class NetworkConfig:
     # Total input planes
     INPUT_PLANES = PLANES_PER_TIMESTEP * HISTORY_LENGTH + META_PLANES  # 28*8 + 7 = 231
 
-    # Network architecture (smaller for M2)
-    NUM_RESIDUAL_BLOCKS = 10  # AlphaZero uses 19, we use 10 for speed
-    NUM_FILTERS = 128         # AlphaZero uses 256, we use 128
+    # Network architecture (sized for GPU training)
+    NUM_RESIDUAL_BLOCKS = 15  # AlphaZero uses 19
+    NUM_FILTERS = 256         # AlphaZero uses 256
 
     # Output: 73 move planes (queen moves + knight moves + underpromotions)
     # - 56 queen moves: 8 directions * 7 distances
